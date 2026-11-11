@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raster to Vector</title>
+<style>
+  :root { --bg:#f6f6f4; --card:#fff; --text:#1f1f1f; --muted:#6b6b6b; --line:#ddd; --accent:#2f6fed; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#161616; --card:#222; --text:#eee; --muted:#9a9a9a; --line:#3a3a3a; --accent:#6c9bff; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.4 system-ui,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); font-weight:600; }
+  main { display:grid; grid-template-columns:280px 1fr; gap:16px; padding:16px; }
+  @media (max-width:800px){ main{ grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  #drop { border:2px dashed var(--line); border-radius:10px; padding:18px; text-align:center;
+          color:var(--muted); cursor:pointer; margin-bottom:12px; }
+  #drop.over { border-color:var(--accent); color:var(--accent); }
+  label { display:block; margin:12px 0 4px; font-size:13px; color:var(--muted); }
+  label b { color:var(--text); font-weight:600; float:right; }
+  select, input[type=range] { width:100%; }
+  select { padding:6px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--text); }
+  .row { display:flex; gap:8px; margin-top:14px; }
+  button { flex:1; padding:8px 10px; border-radius:6px; border:1px solid var(--line);
+           background:var(--card); color:var(--text); cursor:pointer; font:inherit; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:disabled { opacity:.5; cursor:default; }
+  .views { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:800px){ .views{ grid-template-columns:1fr; } }
+  .view h3 { margin:0 0 8px; font-size:13px; color:var(--muted); font-weight:600; }
+  .frame { background:repeating-conic-gradient(#8883 0 25%, transparent 0 50%) 0 0/16px 16px;
+           border-radius:6px; min-height:200px; display:flex; align-items:center; justify-content:center; }
+  .frame img { max-width:100%; max-height:70vh; display:block; }
+  #stats { margin-top:12px; color:var(--muted); font-size:13px; min-height:1.4em; }
+  #err { color:#d33; margin-top:8px; font-size:13px; }
+</style>
+</head>
+<body>
+<header>Raster → Vector</header>
+<main>
+  <section class="card">
+    <div id="drop">Drop an image here<br>or click to choose<input id="file" type="file" accept="image/*" hidden></div>
+
+    <label>Mode</label>
+    <select id="mode">
+      <option value="color">Colour (quantised)</option>
+      <option value="bw">Black &amp; white</option>
+    </select>
+
+    <div id="colorCtl"><label>Colours <b id="v_colors"></b></label>
+      <input id="colors" type="range" min="2" max="32" value="8"></div>
+    <div id="bwCtl" hidden><label>Threshold <b id="v_threshold"></b></label>
+      <input id="threshold" type="range" min="1" max="254" value="128"></div>
+
+    <label>Simplify tolerance (px) <b id="v_tolerance"></b></label>
+    <input id="tolerance" type="range" min="0" max="5" step="0.1" value="1">
+    <label>Remove specks below (px²) <b id="v_min_area"></b></label>
+    <input id="min_area" type="range" min="0" max="200" value="8">
+    <label>Max processing size (px) <b id="v_max_dim"></b></label>
+    <input id="max_dim" type="range" min="200" max="2000" step="100" value="800">
+    <label><input id="smooth" type="checkbox"> Smooth corners (curves)</label>
+
+    <div class="row">
+      <button id="sample">Sample image</button>
+      <button id="download" class="primary" disabled>Download SVG</button>
+    </div>
+    <div id="stats"></div><div id="err"></div>
+  </section>
+
+  <section class="card views">
+    <div class="view"><h3>Original</h3><div class="frame"><img id="orig" alt=""></div></div>
+    <div class="view"><h3>Vector (SVG)</h3><div class="frame"><img id="out" alt=""></div></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const params = ["colors","threshold","tolerance","min_area","max_dim"];
+let blob = null, svgText = "", timer = null, seq = 0;
+
+params.forEach(p => {
+  const el = $(p), out = $("v_" + p);
+  const upd = () => out.textContent = el.value;
+  el.addEventListener("input", () => { upd(); schedule(); });
+  upd();
+});
+$("mode").addEventListener("change", () => {
+  const bw = $("mode").value === "bw";
+  $("colorCtl").hidden = bw; $("bwCtl").hidden = !bw; schedule();
+});
+$("smooth").addEventListener("change", schedule);
+
+function load(b) {
+  blob = b;
+  $("orig").src = URL.createObjectURL(b);
+  run();
+}
+$("drop").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", e => e.target.files[0] && load(e.target.files[0]));
+["dragover","dragenter"].forEach(ev => $("drop").addEventListener(ev, e => { e.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave","drop"].forEach(ev => $("drop").addEventListener(ev, e => { e.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", e => { const f = e.dataTransfer.files[0]; f && load(f); });
+$("sample").addEventListener("click", async () => load(await (await fetch("/api/sample?" + Date.now())).blob()));
+
+function schedule() { clearTimeout(timer); timer = setTimeout(run, 250); }
+
+async function run() {
+  if (!blob) return;
+  const my = ++seq;
+  const q = new URLSearchParams({ mode: $("mode").value, smooth: $("smooth").checked ? 1 : 0 });
+  params.forEach(p => q.set(p, $(p).value));
+  $("stats").textContent = "Vectorizing…"; $("err").textContent = "";
+  try {
+    const res = await fetch("/api/vectorize?" + q, { method: "POST", body: blob });
+    const data = await res.json();
+    if (my !== seq) return;                       // stale response
+    if (!res.ok) throw new Error(data.error);
+    svgText = data.svg;
+    $("out").src = URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" }));
+    const s = data.stats;
+    $("stats").textContent = `${s.paths} paths · ${s.points} points · ${(s.svg_bytes/1024).toFixed(1)} KB · ${s.ms} ms`;
+    $("download").disabled = false;
+  } catch (e) {
+    $("err").textContent = e.message; $("stats").textContent = "";
+  }
+}
+
+$("download").addEventListener("click", () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" }));
+  a.download = "vector.svg"; a.click();
+});
+</script>
+</body>
+</html>
