@@ -1,4 +1,4 @@
-# Raster → Vector (Python + browser)
+# Raster → Vector
 
     pip install -r requirements.txt
     python server.py            # open http://localhost:8000
