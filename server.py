@@ -56,12 +56,12 @@ class Handler(BaseHTTPRequestHandler):
             svg, stats = vectorize(
                 img,
                 mode=q.get("mode", "color"),
-                colors=int(q.get("colors", 8)),
+                colors=int(q.get("colors", 64)),
                 threshold=int(q.get("threshold", 128)),
-                tolerance=float(q.get("tolerance", 1.0)),
-                min_area=float(q.get("min_area", 8)),
+                tolerance=float(q.get("tolerance", 0)),
+                min_area=float(q.get("min_area", 0)),
                 smooth=q.get("smooth") == "1",
-                max_dim=int(q.get("max_dim", 800)),
+                max_dim=int(q.get("max_dim", 2000)),
             )
             stats["ms"] = round((time.time() - t) * 1000)
             self._send(200, {"svg": svg, "stats": stats})
