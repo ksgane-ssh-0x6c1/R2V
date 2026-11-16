@@ -1,7 +1,9 @@
 """
 simplifier.py
-Path simplification for raster-to-vector conversion (Douglas-Peucker).
+Polygon simplification methods used by the R2V benchmark.
 """
+import heapq
+
 import numpy as np
 
 
@@ -35,8 +37,7 @@ def rdp(points, tolerance=1.0):
 
 
 def simplify_closed(points, tolerance=1.0):
-    """Douglas-Peucker for a CLOSED loop: split at the point farthest from
-    the first vertex so both halves are well-conditioned."""
+    """Douglas-Peucker for a CLOSED loop."""
     n = len(points)
     if n < 4:
         return list(points)
@@ -47,9 +48,67 @@ def simplify_closed(points, tolerance=1.0):
     return first[:-1] + second[:-1]
 
 
+def visvalingam_closed(points, area_threshold=1.0):
+    """Simplify a closed loop using Visvalingam-Whyatt triangle areas.
+
+    Vertices are removed in ascending effective-area order while their local
+    triangle area is at most ``area_threshold``. At least three vertices are
+    retained. The input loop is expected not to repeat its first point at the
+    end, matching ``tracer.mask_to_loops`` output.
+    """
+    pts = [tuple(point) for point in points]
+    n = len(pts)
+    if n <= 3:
+        return pts
+
+    previous = [(i - 1) % n for i in range(n)]
+    following = [(i + 1) % n for i in range(n)]
+    alive = [True] * n
+    versions = [0] * n
+    heap = []
+
+    def triangle_area(i):
+        a, b, c = pts[previous[i]], pts[i], pts[following[i]]
+        return abs((a[0] - c[0]) * (b[1] - a[1]) -
+                   (a[0] - b[0]) * (c[1] - a[1])) / 2.0
+
+    for i in range(n):
+        heapq.heappush(heap, (triangle_area(i), i, versions[i]))
+
+    remaining = n
+    while remaining > 3 and heap:
+        area, i, version = heapq.heappop(heap)
+        if not alive[i] or version != versions[i]:
+            continue
+        if area > area_threshold:
+            break
+
+        left, right = previous[i], following[i]
+        alive[i] = False
+        following[left] = right
+        previous[right] = left
+        remaining -= 1
+
+        for neighbor in (left, right):
+            versions[neighbor] += 1
+            heapq.heappush(
+                heap, (triangle_area(neighbor), neighbor, versions[neighbor])
+            )
+
+    start = next(i for i, is_alive in enumerate(alive) if is_alive)
+    result = []
+    current = start
+    while True:
+        result.append(pts[current])
+        current = following[current]
+        if current == start:
+            break
+    return result
+
+
 def simplify_paths(paths, tolerance=1.0):
-    """Simplify a list of open paths."""
-    return [rdp(p, tolerance) if len(p) > 2 else list(p) for p in paths]
+    """Simplify a list of open paths with Douglas-Peucker."""
+    return [rdp(path, tolerance) if len(path) > 2 else list(path) for path in paths]
 
 
 if __name__ == "__main__":
