@@ -1,0 +1,60 @@
+# R2V: Research Project Outline
+
+## Abstract
+
+Raster-to-vector conversion remains a foundational problem in computer graphics, image processing, and geometric reconstruction. This project presents a compact benchmark prototype for exact contour tracing and polygon simplification. The system converts raster input into SVG paths by tracing boundary loops from pixel edges, simplifying them with Douglas-Peucker, and exporting the result as a vector representation.
+
+The implementation is intentionally lightweight and designed for experimentation. It combines a synthetic dataset generator, benchmark harness, and local web interface to support reproducible evaluation of runtime and geometric complexity.
+
+## Introduction
+
+Many raster graphics workflows rely on edge extraction or vectorization to enable rescaling, editing, and compression. However, producing a compact and faithful vector representation is difficult when balancing geometric accuracy against path complexity. This project addresses that challenge with a direct pipeline: detect boundaries, trace loops exactly, simplify the resulting contours, and render them as SVG.
+
+## Method
+
+The system follows a simple end-to-end pipeline:
+
+1. Normalize the raster input to a visible mask.
+2. Quantize or threshold the image to create meaningful regions.
+3. Trace object boundaries using exact pixel-edge connectivity.
+4. Simplify closed loops with Douglas-Peucker.
+5. Export the final result as SVG paths.
+
+This design favors interpretability and reproducibility over large-scale engineering complexity.
+
+## Benchmarking
+
+The repository includes a synthetic benchmark designed to evaluate the vectorization pipeline under controlled conditions. Experimental variables include:
+
+- image size,
+- scene complexity,
+- simplification tolerance,
+- quantization level,
+- and output path count.
+
+The benchmark reports timing and geometric complexity to support early-stage research evaluation.
+
+## Contributions
+
+This repository contributes a compact benchmark prototype for:
+
+- exact contour tracing from raster masks,
+- simplification of closed geometric loops,
+- SVG export with transparent background support,
+- and reproducible benchmarking on synthetic inputs.
+
+## Limitations and future work
+
+This project should be viewed as a research prototype rather than a production-grade system. It is well suited to academic experimentation and iteration, but it does not yet include large benchmark datasets, rigorous baselines, or full publication-ready quantitative evaluation.
+
+Future work could include:
+
+- broader benchmark suites,
+- objective quality metrics,
+- comparisons against classical vectorization methods,
+- and formal paper-ready statistical reporting.
+
+## Conclusion
+
+R2V is a minimal but credible research prototype for raster-to-vector conversion and benchmark evaluation. It is structured to support iterative experimentation, early paper drafting, and further expansion into a larger benchmark or systems paper.
+
